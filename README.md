@@ -51,8 +51,7 @@ By default, recordings go to your browser's Downloads folder. To save to a speci
 2. Under **Root Download Directory**, click **Choose Folder**
 3. Select your folder and click **Save Settings**
 
-The folder selection survives browser restarts. A file called `liveFolder.TXT` is written to the folder when you save — this is normal and is used to maintain folder access across restarts.
-
+The folder selection may survives browser restarts. Chrome's behavipr has been inconsistent. Only sure way to ensure all recordings go to a folder of your choice is to set that folder as the download directory of the browser.
 ---
 
 ## Wait for Recording URLs (WRU)
