@@ -18,11 +18,12 @@ A Chrome extension for unattended live stream recording and VOD downloading from
 ## Installation
 
 1. Download the latest release zip from the [Releases](https://github.com/mountlord/livedownload/releases) page
-2. Unzip to a local folder
+2. Unzip to a local folder - if live updates to extension are needed
 3. Open Chrome and navigate to `chrome://extensions`
 4. Enable **Developer mode** (top right)
-5. Click **Load unpacked** and select the `Extension` folder
-6. The liveDownload icon appears in the toolbar
+5. Drag & Drop liveDownload.zip OR do 6.
+6. Click **Load unpacked** and select the `Extension` folder
+7. The liveDownload icon appears in the toolbar
 
 ---
 
