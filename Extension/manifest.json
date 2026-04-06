@@ -1,0 +1,50 @@
+{
+	"manifest_version": 3,
+	"version": "0.7.30.17",
+	"name": "liveDownload",
+	"description": "Monitor and record live streams from sites that permit recording",
+	"permissions": [
+	"storage",
+	"contextMenus",
+	"webRequest",
+	"declarativeNetRequestWithHostAccess",
+	"declarativeContent",
+	"scripting",
+	"alarms",
+	"notifications",
+	"system.display",
+	"contentSettings"
+	],
+	"optional_permissions": [
+	"power"
+	],
+	"host_permissions": [
+	"*://*/*"
+	],
+	"homepage_url": "https://github.com/your-repo/liveDownload",
+	"background": {
+	"service_worker": "worker.js"
+	},
+	"icons": {
+	"16": "icons/16.png",
+	"32": "icons/32.png",
+	"38": "icons/38.png",
+	"48": "icons/48.png",
+	"64": "icons/64.png",
+	"128": "icons/128.png",
+	"256": "icons/256.png",
+	"512": "icons/512.png"
+	},
+	"action": {
+	"default_title": "liveDownload"
+	},
+	"browser_specific_settings": {
+		"gecko": {
+		  "id": "{2ea2bfef-af69-4427-909c-34e1f3f5a418}",
+		  "strict_min_version": "128.0"
+		}
+	},
+	"content_security_policy": {
+	  "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+	}	
+}

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>liveDownload — Help</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Times New Roman', Times, Georgia, serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      line-height: 1.7;
+    }
+    .hero {
+      width: 100%;
+      height: 200px;
+      background-image: url('images/liveLogo.png');
+      background-size: cover;
+      background-position: center;
+      position: relative;
+    }
+    .hero-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, rgba(15,23,42,0.2), rgba(15,23,42,0.85));
+      display: flex;
+      align-items: flex-end;
+      padding: 24px 32px;
+    }
+    .hero-overlay h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    .hero-overlay .version {
+      font-size: 14px;
+      color: #94a3b8;
+      margin-left: 12px;
+      font-weight: 400;
+    }
+    .content {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 32px 24px 64px;
+    }
+    h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin: 36px 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #1e293b;
+    }
+    h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin: 20px 0 8px;
+    }
+    p { margin-bottom: 12px; color: #94a3b8; font-size: 14px; }
+    ul, ol { margin: 0 0 12px 20px; color: #94a3b8; font-size: 14px; }
+    li { margin-bottom: 6px; }
+    code {
+      background: #1e293b;
+      color: #7dd3fc;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+    }
+    pre {
+      background: #1e293b;
+      color: #7dd3fc;
+      padding: 14px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 13px;
+    }
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      background: #1e293b;
+      color: #f1f5f9;
+      font-weight: 600;
+      border-bottom: 1px solid #334155;
+    }
+    td {
+      padding: 8px 12px;
+      color: #94a3b8;
+      border-bottom: 1px solid #1e293b;
+    }
+    td:first-child { color: #e2e8f0; font-weight: 500; white-space: nowrap; }
+    .tip {
+      background: #1e293b;
+      border-left: 3px solid #3b82f6;
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin: 12px 0;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+    .tip strong { color: #7dd3fc; }
+    .warn {
+      background: #1e293b;
+      border-left: 3px solid #f59e0b;
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin: 12px 0;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+    .warn strong { color: #fbbf24; }
+    a { color: #60a5fa; }
+    a:hover { color: #93c5fd; }
+    .donate-section {
+      margin-top: 48px;
+      text-align: center;
+      padding: 24px;
+      background: #1e293b;
+      border-radius: 12px;
+    }
+    .donate-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 12px 24px;
+      background: #fff;
+      color: #c0392b;
+      border: 2px solid #c0392b;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      -webkit-font-smoothing: antialiased;
+      transition: background 0.15s, color 0.15s;
+    }
+    .donate-btn:hover { background: #c0392b; color: #fff; }
+    .donate-note { margin-top: 8px; font-size: 11px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <div class="hero-overlay">
+      <h1>liveDownload <span class="version">Help Guide</span></h1>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <h2>What is liveDownload?</h2>
+    <p>liveDownload is a Chrome extension for unattended live stream recording and VOD downloading from any HLS/DASH-based streaming platform. Set it up, walk away, and come back to complete recordings.</p>
+
+    <h2>Quick Start</h2>
+    <h3>Manual recording</h3>
+    <ol>
+      <li>Navigate to a live stream page (e.g. <code>play.livebroadcast.com/broadcaster</code>)</li>
+      <li>Click the liveDownload icon — the recorder window opens</li>
+      <li>Detected streams appear under <strong>Available Streams</strong></li>
+      <li>Select a stream and click <strong>Download Selected</strong></li>
+    </ol>
+    <h3>Auto-recording (unattended)</h3>
+    <ol>
+      <li>Click the liveDownload icon to open the recorder window</li>
+      <li>Expand the <strong>Wait for Recording URLs</strong> section</li>
+      <li>Paste broadcaster URLs and click <strong>+ Add</strong></li>
+      <li>liveDownload polls each URL every 15 minutes. When a stream goes live, recording starts automatically.</li>
+    </ol>
+
+    <h2>Setting a Recording Folder</h2>
+    <p>By default, recordings go to your browser's Downloads folder. To save to a specific folder:</p>
+    <ol>
+      <li>Click ⚙️ <strong>Settings</strong> in the header</li>
+      <li>Under <strong>Root Download Directory</strong>, click <strong>Choose Folder</strong></li>
+      <li>Select your folder and click <strong>Save Settings</strong></li>
+    </ol>
+    <div class="tip"><strong>Tip:</strong> The folder selection is supposed to survives browser restarts. However, Chrome seems to behave differently at different times. The best way to ensure that your recording always goes to the selected folder is change the Download folder in browser setting. Another approach that seems to work: After selecting the folder of choice, start a manual recording and grant permission using the button on the top right corner of the window.</div>
+
+    <h2>Wait for Recording URLs (WRU)</h2>
+    <p>The WRU system is the heart of unattended recording. Add broadcaster URLs and liveDownload polls them automatically.</p>
+    <table>
+      <tr><th>Button</th><th>Action</th></tr>
+      <tr><td>+ Add</td><td>Add a single broadcaster URL</td></tr>
+      <tr><td>📤 Export</td><td>Save the current list to a JSON file</td></tr>
+      <tr><td>📥 Import</td><td>Load a list from a JSON file</td></tr>
+      <tr><td>🔄 Poll Now</td><td>Immediately check all active URLs</td></tr>
+      <tr><td>⏸️ Suspend</td><td>Pause automatic polling</td></tr>
+      <tr><td>▶️ Resume</td><td>Resume automatic polling</td></tr>
+    </table>
+    <div class="tip"><strong>Tip:</strong> liveDownload skips URLs that are already recording — no duplicate recordings.</div>
+
+    <h2>Live Recording Dashboard</h2>
+    <p>Once recording starts, the dashboard shows real-time stats.</p>
+    <table>
+      <tr><th>Stat</th><th>Description</th></tr>
+      <tr><td>⏱️ Duration</td><td>Elapsed recording time</td></tr>
+      <tr><td>📦 Downloaded</td><td>Total data written to disk (current file)</td></tr>
+      <tr><td>📁 Segments</td><td>Segments successfully downloaded</td></tr>
+      <tr><td>⚠️ Fails</td><td>Failed / total segments and fail percentage</td></tr>
+      <tr><td>📋 Queue</td><td>Segments waiting to be downloaded</td></tr>
+    </table>
+
+    <h3>Recovery Mode</h3>
+    <p>If the stream is interrupted (authentication expiry, broadcaster restart, network failure), liveDownload enters Recovery Mode:</p>
+    <ul>
+      <li>The current file is finalized and saved</li>
+      <li>A background tab opens the broadcaster's page</li>
+      <li>When the stream reappears, recording resumes into a new file automatically</li>
+      <li>Recovery times out after 10 minutes if no stream is found</li>
+    </ul>
+
+    <h3>Stopping</h3>
+    <p>Click <strong>⬛ STOP RECORDING</strong> to finalize and save. The file is written immediately — no post-processing needed.</p>
+
+    <h2>VOD Downloads</h2>
+    <p>For pre-recorded content, liveDownload detects m3u8/mpd playlist URLs on the page and lists them under <strong>Available Streams</strong>.</p>
+    <ul>
+      <li><strong>Single download</strong> — select one stream and click <strong>Download Selected</strong></li>
+      <li><strong>Batch download</strong> — select multiple streams, click <strong>Download Selected</strong>, choose a folder — each stream saves as a separate file</li>
+    </ul>
+
+    <h2>Settings Reference</h2>
+    <table>
+      <tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+      <tr><td>Root Download Directory</td><td>—</td><td>Folder where recordings are saved</td></tr>
+      <tr><td>Resilient Mode</td><td>ON</td><td>Keep recording through errors; never auto-stop</td></tr>
+      <tr><td>Max Manifest Errors</td><td>10</td><td>Stop after this many consecutive errors (Resilient Mode OFF only)</td></tr>
+      <tr><td>Recovery Poll Interval</td><td>5 min</td><td>How often to check for stream restart during recovery</td></tr>
+      <tr><td>Errors Before Recovery</td><td>100</td><td>Consecutive errors before entering recovery (~5 min at 3s interval)</td></tr>
+      <tr><td>Auto-Translate Titles</td><td>OFF</td><td>Translate stream titles to English via Google Translate before saving</td></tr>
+      <tr><td>Check Interval</td><td>15 min</td><td>How often WRU polls broadcaster URLs</td></tr>
+      <tr><td>Monitor Window Timeout</td><td>45 s</td><td>How long to wait per URL before moving to the next</td></tr>
+      <tr><td>Auto Close When Done</td><td>OFF</td><td>Close the recorder window after download completes</td></tr>
+      <tr><td>Detect Streams in XHR</td><td>OFF</td><td>Intercept XHR responses for broader stream detection</td></tr>
+    </table>
+
+    <h2>Output Files</h2>
+    <p>Live recordings are saved as <code>.ts</code> (MPEG-TS) files by default.</p>
+    <p><strong>Filename format:</strong> <code>[Title]-[Mon]-[DD]-[YYYY]-[H]-[MM]-[SS][AM/PM].ts</code></p>
+    <p>Example: <code>BroadcasterName-Apr-04-2026-10-33-05PM.ts</code></p>
+    <p>Recovery files from the same session share the same base name with a new timestamp.</p>
+
+    <h3>Converting to MP4</h3>
+    <pre>ffmpeg -i recording.ts -c copy output.mp4</pre>
+    <p>Or use the included <code>TS2MP4.PS1</code> PowerShell script for batch conversion with logging:</p>
+    <pre>.\TS2MP4.PS1 -i "D:\Recordings" -o "D:\MP4"</pre>
+    <div class="warn"><strong>Note:</strong> ffmpeg may show "Packet corrupt" warnings when converting some recordings. This is cosmetic — the DTS values from recording's session clock are high but valid. Output quality is unaffected.</div>
+
+    <h2>What We Tested</h2>
+    <table>
+      <tr><th>Platform</th><th>Live Recording</th><th>VOD Download</th></tr>
+      <tr><td>SOOP (sooplive.com)</td><td>✅ Full support</td><td>✅</td></tr>
+      <tr><td>Twitch</td><td>⚠️ Tested, token expiry recovery in roadmap</td><td>✅ AES-128 + fMP4</td></tr>
+      <tr><td>HLS (m3u8)</td><td>✅</td><td>✅</td></tr>
+      <tr><td>DASH (mpd)</td><td>✅</td><td>✅</td></tr>
+    </table>
+
+    <h2>Privacy</h2>
+    <ul>
+      <li><strong>No telemetry.</strong> liveDownload does not collect, transmit, or store any usage data.</li>
+      <li><strong>No ads.</strong> No advertising of any kind.</li>
+      <li><strong>Google Translate</strong> is used only if you enable Auto-Translate Titles (off by default). When enabled, stream titles are sent to Google Translate.</li>
+      <li><strong>Autoplay assistance.</strong> To start stream playback on monitored pages, liveDownload injects mouse click events into the player area.</li>
+      <li><strong>Sound permission.</strong> liveDownload sets Chrome's sound permission to "Allow" for broadcaster origins you add to the Watch List, to ensure autoplay works reliably.</li>
+    </ul>
+
+    <h2>Troubleshooting</h2>
+    <h3>No streams detected</h3>
+    <p>Try enabling <strong>Detect Streams in XHR Requests</strong> in Settings. Some players load streams via JavaScript and won't appear in the default network log.</p>
+    <h3>Recording saves to Downloads instead of my folder</h3>
+    <p>Make sure you click <strong>Save Settings</strong> after choosing a folder — not just choose it. After saving, a file called <code>liveFolder.TXT</code> should appear in your chosen folder. If it doesn't, the folder was not saved correctly.</p>
+    <h3>Auto-record didn't start</h3>
+    <p>Check that the URL in WRU matches the broadcaster's base URL exactly (e.g. <code>play.livebroadcast.com/username</code>). Use the <strong>🔄 Poll Now</strong> button to trigger an immediate check rather than waiting for the next scheduled poll.</p>
+    <h3>ffmpeg shows "Packet corrupt" warnings</h3>
+    <p>This is expected for some recordings and is cosmetic. The output file plays correctly.</p>
+
+    <div class="donate-section">
+      <p style="color:#e2e8f0; font-size:15px; font-weight:500;">Enjoying liveDownload?</p>
+      <p style="color:#94a3b8; font-size:13px; margin-top:4px;">Consider supporting a great cause.</p>
+      <a class="donate-btn" href="https://www.savethechildren.org/savekids" target="_blank">❤️ Donate to Save the Children</a>
+      <div class="donate-note">Not affiliated with Save the Children. Opens their official donation page.</div>
+    </div>
+
+  </div>
+</body>
+</html>

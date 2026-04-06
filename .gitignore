@@ -1,24 +1,47 @@
-# Compiled class file
-*.class
+# OS files
+.DS_Store
+Thumbs.db
 
-# Log file
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# Logs
 *.log
+npm-debug.log*
 
-# BlueJ files
-*.ctxt
+# Temporary files
+*.tmp
+*.temp
 
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
-*.jar
-*.war
-*.nar
-*.ear
+# Archives (don't commit built packages)
 *.zip
 *.tar.gz
 *.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
-hs_err_pid*
-replay_pid*
+# Node modules (if any)
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Private keys
+*.pem
+*.key
+
+# Development artifacts
+*.crx
+*.pem
+
+#Custom
+gitShouldNotSee/
+livedownload_core
