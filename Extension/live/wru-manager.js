@@ -115,7 +115,6 @@ async function addWRUCurrentTab(url, title, tabId) {
     success: true,
     entry: newEntry,
     waitInfo: waitResult.success ? {
-      nextCheck: waitResult.nextCheck,
       checkInterval: waitResult.checkInterval
     } : null
   };
@@ -195,12 +194,44 @@ async function activateWRU(url) {
 }
 
 /**
+ * Update a WRU entry's URL, title, and poll window.
+ */
+async function updateWRU(originalUrl, updates) {
+  const list  = await getWRUList();
+  const entry = list.find(item => item.url === originalUrl);
+
+  if (!entry) {
+    return { success: false, error: 'Entry not found' };
+  }
+
+  // If URL changed, check for duplicates
+  if (updates.url !== originalUrl && list.some(item => item.url === updates.url)) {
+    return { success: false, error: 'URL already in list' };
+  }
+
+  entry.url       = updates.url;
+  entry.title     = updates.title || updates.url;
+  entry.pollStart = updates.pollStart || null;
+  entry.pollEnd   = updates.pollEnd   || null;
+
+  await saveWRUList(list);
+  console.log(ts(), `WRU] Updated entry: ${entry.url} (poll: ${entry.pollStart || 'always'}–${entry.pollEnd || 'always'})`);
+  return { success: true };
+}
+
+/**
  * Confirm a URL is still active after recording stops.
  * The sequential poller will pick it up at the next alarm cycle.
  */
 async function restoreWRUWaiting(url) {
   const list  = await getWRUList();
-  const entry = list.find(item => item.url === url);
+
+  // The recorder page's href may include a broadcast ID suffix (e.g. /293260443)
+  // that isn't in the WRU list's base URL. Try exact match first, then prefix match.
+  let entry = list.find(item => item.url === url);
+  if (!entry) {
+    entry = list.find(item => url.startsWith(item.url));
+  }
 
   if (!entry) {
     console.log(ts(), `WRU] URL not in list, cannot restore: ${url}`);
@@ -211,7 +242,7 @@ async function restoreWRUWaiting(url) {
     return { success: false };
   }
 
-  console.log(ts(), `WRU] WRU entry confirmed active, will be monitored at next poll: ${url}`);
+  console.log(ts(), `WRU] WRU entry confirmed active, will be monitored at next poll: ${entry.url}`);
   return { success: true };
 }
 

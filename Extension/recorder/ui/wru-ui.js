@@ -121,7 +121,9 @@ async function exportWRUList() {
       exportedAt: new Date().toISOString(),
       urls: urls.map(item => ({
         url: item.url,
-        title: item.title
+        title: item.title,
+        pollStart: item.pollStart || null,
+        pollEnd: item.pollEnd || null
       }))
     };
     
@@ -166,12 +168,23 @@ async function importWRUList(e) {
       const response = await chrome.runtime.sendMessage({
         method: 'wru-add',
         url: item.url,
-        title: item.title,  // Preserve custom title from import
-        skipPoll: true  // Don't trigger poll for each URL
+        title: item.title,
+        skipPoll: true
       });
       
       if (response?.success) {
         imported++;
+        // Apply poll window if present in import data
+        if (item.pollStart && item.pollEnd) {
+          await chrome.runtime.sendMessage({
+            method: 'wru-update',
+            originalUrl: item.url,
+            url: item.url,
+            title: item.title || item.url,
+            pollStart: item.pollStart,
+            pollEnd: item.pollEnd
+          });
+        }
       } else {
         skipped++;
       }
@@ -296,17 +309,24 @@ async function loadWRUList() {
     } else {
       for (const item of activeUrls) {
         const statusIcon = '👁️';
-        const itemClass = '';
-        const networkNotice = '';
+        const pollWindow = (item.pollStart && item.pollEnd)
+          ? `<span class="wru-poll-window">${item.pollStart} – ${item.pollEnd}</span>`
+          : '';
         
         html += `
-          <div class="wru-item ${itemClass}" data-url="${escapeHtml(item.url)}">
+          <div class="wru-item" data-url="${escapeHtml(item.url)}">
             <span class="wru-item-status">${statusIcon}</span>
             <div class="wru-item-info">
-              <div class="wru-item-title">${escapeHtml(item.title || 'Unknown')}${networkNotice}</div>
+              <div class="wru-item-title">${escapeHtml(item.title || 'Unknown')}${pollWindow}</div>
               <div class="wru-item-url">${escapeHtml(item.url)}</div>
             </div>
             <div class="wru-item-actions">
+              <button class="wru-item-btn edit" 
+                      data-action="edit" 
+                      data-url="${escapeHtml(item.url)}"
+                      title="Edit URL, title, poll window">
+                ✏️
+              </button>
               <button class="wru-item-btn copy" 
                       data-action="copy" 
                       data-url="${escapeHtml(item.url)}"
@@ -339,14 +359,24 @@ async function loadWRUList() {
       </div>`;
       
       for (const item of inactiveUrls) {
+        const pollWindow = (item.pollStart && item.pollEnd)
+          ? `<span class="wru-poll-window">${item.pollStart} – ${item.pollEnd}</span>`
+          : '';
+
         html += `
           <div class="wru-item inactive" data-url="${escapeHtml(item.url)}">
             <span class="wru-item-status">⏸️</span>
             <div class="wru-item-info">
-              <div class="wru-item-title">${escapeHtml(item.title || 'Unknown')}</div>
+              <div class="wru-item-title">${escapeHtml(item.title || 'Unknown')}${pollWindow}</div>
               <div class="wru-item-url">${escapeHtml(item.url)}</div>
             </div>
             <div class="wru-item-actions">
+              <button class="wru-item-btn edit" 
+                      data-action="edit" 
+                      data-url="${escapeHtml(item.url)}"
+                      title="Edit URL, title, poll window">
+                ✏️
+              </button>
               <button class="wru-item-btn copy" 
                       data-action="copy" 
                       data-url="${escapeHtml(item.url)}"
@@ -470,6 +500,10 @@ async function handleWRUAction(e) {
         }
         break;
         
+      case 'edit':
+        openWRUEditModal(url);
+        return; // Don't refresh list — modal handles it
+        
       case 'copy':
         try {
           await navigator.clipboard.writeText(url);
@@ -489,4 +523,172 @@ async function handleWRUAction(e) {
     console.error('[WRU] Error handling action:', e);
     showNotification('Error: ' + e.message, 'error');
   }
+}
+
+// ─── Edit Modal ──────────────────────────────────────────────────────────────
+
+async function openWRUEditModal(url) {
+  // Fetch current entry data
+  let entry;
+  try {
+    const response = await chrome.runtime.sendMessage({ method: 'wru-getAll' });
+    entry = response?.urls?.find(item => item.url === url);
+  } catch (e) {
+    showNotification('Could not load entry', 'error');
+    return;
+  }
+  if (!entry) {
+    showNotification('Entry not found', 'error');
+    return;
+  }
+
+  // Remove any existing modal
+  document.getElementById('wru-edit-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'wru-edit-modal';
+  modal.className = 'wru-modal-overlay';
+  modal.innerHTML = `
+    <div class="wru-modal">
+      <div class="wru-modal-header">Edit WRU Entry</div>
+      <div class="wru-modal-body">
+        <div class="wru-modal-field">
+          <label>URL</label>
+          <input type="text" id="wru-edit-url" value="${escapeHtml(entry.url)}" spellcheck="false">
+        </div>
+        <div class="wru-modal-field">
+          <label>Title</label>
+          <input type="text" id="wru-edit-title" value="${escapeHtml(entry.title || '')}">
+        </div>
+        <div class="wru-modal-field">
+          <label>Poll Window (leave empty for always, overnight OK e.g. 20:00–07:00)</label>
+          <div class="wru-time-row">
+            <div class="wru-time-control">
+              <span>Start</span>
+              <div class="wru-time-spinner">
+                <button class="wru-time-btn" data-target="wru-edit-start" data-dir="up">▲</button>
+                <input type="text" id="wru-edit-start" value="${entry.pollStart || ''}" placeholder="HH:MM" maxlength="5" class="wru-time-input">
+                <button class="wru-time-btn" data-target="wru-edit-start" data-dir="down">▼</button>
+              </div>
+            </div>
+            <span class="wru-time-dash">–</span>
+            <div class="wru-time-control">
+              <span>End</span>
+              <div class="wru-time-spinner">
+                <button class="wru-time-btn" data-target="wru-edit-end" data-dir="up">▲</button>
+                <input type="text" id="wru-edit-end" value="${entry.pollEnd || ''}" placeholder="HH:MM" maxlength="5" class="wru-time-input">
+                <button class="wru-time-btn" data-target="wru-edit-end" data-dir="down">▼</button>
+              </div>
+            </div>
+            <button class="wru-time-clear-btn" title="Clear poll window">✕</button>
+          </div>
+        </div>
+      </div>
+      <div class="wru-modal-footer">
+        <button class="wru-modal-btn cancel" id="wru-edit-cancel">Cancel</button>
+        <button class="wru-modal-btn save" id="wru-edit-save">Save</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // ── Time spinner logic ──
+  const pollInterval = 15; // minutes — matches polling interval resolution
+
+  function parseHHMM(str) {
+    const m = (str || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    const h = parseInt(m[1]), min = parseInt(m[2]);
+    if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+    return h * 60 + min;
+  }
+
+  function formatHHMM(totalMin) {
+    totalMin = ((totalMin % 1440) + 1440) % 1440; // wrap 0–1439
+    return String(Math.floor(totalMin / 60)).padStart(2, '0') + ':' + String(totalMin % 60).padStart(2, '0');
+  }
+
+  modal.querySelectorAll('.wru-time-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById(btn.dataset.target);
+      const dir = btn.dataset.dir === 'up' ? 1 : -1;
+      let mins = parseHHMM(input.value);
+      if (mins === null) {
+        // Default: start at current time rounded to interval
+        const now = new Date();
+        mins = Math.round((now.getHours() * 60 + now.getMinutes()) / pollInterval) * pollInterval;
+      }
+      mins += dir * pollInterval;
+      input.value = formatHHMM(mins);
+    });
+  });
+
+  // Clear button
+  modal.querySelector('.wru-time-clear-btn').addEventListener('click', () => {
+    document.getElementById('wru-edit-start').value = '';
+    document.getElementById('wru-edit-end').value = '';
+  });
+
+  // ── Save / Cancel ──
+  document.getElementById('wru-edit-cancel').addEventListener('click', () => modal.remove());
+
+  // Click overlay to cancel
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+
+  document.getElementById('wru-edit-save').addEventListener('click', async () => {
+    const newUrl   = document.getElementById('wru-edit-url').value.trim();
+    const newTitle = document.getElementById('wru-edit-title').value.trim();
+    const startVal = document.getElementById('wru-edit-start').value.trim();
+    const endVal   = document.getElementById('wru-edit-end').value.trim();
+
+    if (!newUrl) {
+      showNotification('URL is required', 'error');
+      return;
+    }
+
+    // Validate times if either is set
+    let pollStart = null, pollEnd = null;
+    if (startVal || endVal) {
+      if (!startVal || !endVal) {
+        showNotification('Both start and end times are required, or clear both', 'error');
+        return;
+      }
+      if (parseHHMM(startVal) === null || parseHHMM(endVal) === null) {
+        showNotification('Invalid time format — use HH:MM (24-hour)', 'error');
+        return;
+      }
+      if (parseHHMM(startVal) === parseHHMM(endVal)) {
+        showNotification('Start and end times cannot be the same', 'error');
+        return;
+      }
+      pollStart = startVal;
+      pollEnd   = endVal;
+    }
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        method: 'wru-update',
+        originalUrl: url,
+        url: newUrl,
+        title: newTitle || newUrl,
+        pollStart,
+        pollEnd
+      });
+
+      if (response?.success) {
+        showNotification('Entry updated', 'success');
+        modal.remove();
+        loadWRUList();
+        updateWRUCount();
+      } else {
+        showNotification(response?.error || 'Update failed', 'error');
+      }
+    } catch (e) {
+      console.error('[WRU] Edit save error:', e);
+      showNotification('Save failed: ' + e.message, 'error');
+    }
+  });
 }

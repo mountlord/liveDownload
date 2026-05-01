@@ -1583,3 +1583,189 @@ body.live-recording-active #forbidden-container {
 
 .reauth-btn:hover  { background: #2563eb; }
 .reauth-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Sort toggle button */
+.sort-toggle-btn {
+  font-size: 12px;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.sort-toggle-btn:hover { background: #e2e8f0; }
+
+/* Pinned most-recent segment row */
+.pinned-separator td {
+  padding: 2px 8px !important;
+  font-size: 10px;
+  color: #475569;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #cbd5e1;
+  background: transparent;
+}
+.pinned-row { background: #f0f9ff; }
+.pinned-row:hover { background: #e0f2fe !important; }
+
+/* WRU Poll Window badge */
+.wru-poll-window {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 10px;
+  color: #3b82f6;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 3px;
+  font-family: monospace;
+  vertical-align: middle;
+}
+
+/* WRU Edit Modal */
+.wru-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+.wru-modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+.wru-modal-header {
+  padding: 16px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  border-bottom: 1px solid #e2e8f0;
+}
+.wru-modal-body {
+  padding: 16px 20px;
+}
+.wru-modal-field {
+  margin-bottom: 14px;
+}
+.wru-modal-field label {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+.wru-modal-field input[type="text"] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1e293b;
+  box-sizing: border-box;
+}
+.wru-modal-field input[type="text"]:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+.wru-modal-footer {
+  padding: 12px 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+.wru-modal-btn {
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s;
+}
+.wru-modal-btn.cancel {
+  background: #f1f5f9;
+  color: #475569;
+}
+.wru-modal-btn.cancel:hover { background: #e2e8f0; }
+.wru-modal-btn.save {
+  background: #3b82f6;
+  color: #fff;
+}
+.wru-modal-btn.save:hover { background: #2563eb; }
+
+/* Time spinner controls */
+.wru-time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wru-time-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.wru-time-control > span {
+  font-size: 11px;
+  color: #94a3b8;
+}
+.wru-time-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.wru-time-btn {
+  padding: 2px 12px;
+  font-size: 10px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  color: #64748b;
+  line-height: 1;
+}
+.wru-time-btn:first-child { border-radius: 4px 4px 0 0; }
+.wru-time-btn:last-child  { border-radius: 0 0 4px 4px; }
+.wru-time-btn:hover { background: #e2e8f0; }
+.wru-time-input {
+  width: 60px;
+  text-align: center;
+  padding: 6px 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 0;
+  font-size: 14px;
+  font-family: monospace;
+  color: #1e293b;
+}
+.wru-time-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+.wru-time-dash {
+  font-size: 16px;
+  color: #94a3b8;
+  margin: 0 4px;
+  padding-top: 14px;
+}
+.wru-time-clear-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 14px;
+}
+.wru-time-clear-btn:hover { background: #fecaca; }

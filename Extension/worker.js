@@ -32,6 +32,7 @@ if (typeof importScripts !== 'undefined') {
   self.importScripts('block/icon.js');
   self.importScripts('context.js');
   self.importScripts('detector/core.js');
+  self.importScripts('autoplay.js');
   self.importScripts('live/recording-registry.js');
   self.importScripts('live/window-manager.js');
   self.importScripts('live/polling-manager.js');
@@ -72,9 +73,6 @@ const open = async (tab, extra = []) => {
     const win   = await chrome.windows.getCurrent();
     const prefs = await chrome.storage.local.get({ width: 1000, height: 750 });
 
-    const left = win.left + Math.round((win.width  - 1000) / 2);
-    const top  = win.top  + Math.round((win.height -  750) / 2);
-
     const args = new URLSearchParams();
     args.set('tabId', tab.id);
     args.set('title', tab.title || '');
@@ -83,26 +81,12 @@ const open = async (tab, extra = []) => {
 
     const url = '/recorder/index.html?' + args.toString();
 
-    try {
-      await chrome.windows.create({
-        url,
-        width:  prefs.width,
-        height: prefs.height,
-        left,
-        top,
-        type: 'popup'
-      });
-    } catch (e) {
-      // First fallback: strip position, keep size
-      console.warn('[SW] ⚠️ Bounds rejected for plugin window, opening without position:', e.message);
-      try {
-        await chrome.windows.create({ url, width: prefs.width, height: prefs.height, type: 'popup' });
-      } catch (e2) {
-        // Second fallback: strip everything — let Chrome decide size and position
-        console.warn('[SW] ⚠️ Size also rejected, opening with no bounds:', e2.message);
-        await chrome.windows.create({ url, type: 'popup' });
-      }
-    }
+    await _createWindowWithFallback(url, 'popup', {
+      width:  prefs.width,
+      height: prefs.height,
+      left:   win.left + Math.round((win.width  - 1000) / 2),
+      top:    win.top  + Math.round((win.height -  750) / 2)
+    });
   } catch (e) {
     console.error('[SW] ❌ Failed to open plugin window:', e.message);
   }
@@ -299,6 +283,13 @@ chrome.runtime.onMessage.addListener((request, sender, response) => {
     activateWRU(request.url).then(response);
     return true;
   }
+  else if (request.method === 'wru-update') {
+    updateWRU(request.originalUrl, {
+      url: request.url, title: request.title,
+      pollStart: request.pollStart, pollEnd: request.pollEnd
+    }).then(response);
+    return true;
+  }
   else if (request.method === 'wru-restoreWaiting') {
     restoreWRUWaiting(request.url).then(response);
     return true;
@@ -331,7 +322,11 @@ chrome.alarms.onAlarm.addListener(a => {
 }
 
 {
-  const once = () => indexedDB.databases().then(dbs => { for (const db of dbs) indexedDB.deleteDatabase(db.Name); });
+  const once = () => indexedDB.databases().then(dbs => {
+    for (const db of dbs) {
+      if (db.name !== 'liveDownload') indexedDB.deleteDatabase(db.name);
+    }
+  });
   if (indexedDB.databases) {
     chrome.runtime.onInstalled.addListener(once);
     chrome.runtime.onStartup.addListener(once);

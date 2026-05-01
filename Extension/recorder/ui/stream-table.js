@@ -4,6 +4,9 @@
  */
 'use strict';
 
+// Sort state: false = ascending (oldest first), true = descending (newest first)
+let sortDescending = false;
+
 async function renderStreamsTable() {
   const contentEl = document.getElementById('streams-content');
   if (!contentEl) return;
@@ -21,15 +24,20 @@ async function renderStreamsTable() {
     return;
   }
   
-  // Check for live streams
+  // Check for live streams — check ONE representative m3u8 and apply to all.
+  // All streams on the same page are either live or VOD — no need to check each.
+  let cachedLiveResult = null;
   for (const [index, data] of streamData) {
-    if (data.ext === 'm3u8' && window.LiveMonitor) {
-      try {
-        data.isLive = await window.LiveMonitor.isLiveStream(data.url);
-      } catch (e) {
-        console.warn('[modern-ui] Live check failed:', e);
-        data.isLive = false;
+    if (data.ext === 'm3u8' && data.isLive === null && window.LiveMonitor) {
+      if (cachedLiveResult === null) {
+        try {
+          cachedLiveResult = await window.LiveMonitor.isLiveStream(data.url);
+        } catch (e) {
+          console.warn('[modern-ui] Live check failed:', e);
+          cachedLiveResult = false;
+        }
       }
+      data.isLive = cachedLiveResult;
     }
   }
   
@@ -65,6 +73,16 @@ async function renderStreamsTable() {
     // Show all streams
     displayStreams = [...streamData.entries()];
   }
+
+  // Sort by stream index (proxy for detection order)
+  displayStreams.sort((a, b) => sortDescending ? b[0] - a[0] : a[0] - b[0]);
+
+  // In "show all" mode, find the most recent segment to pin at top
+  let pinnedSegment = null;
+  if (!filterPlaylistsOnly && segments.length > 0) {
+    // Most recent = highest index
+    pinnedSegment = segments[segments.length - 1];
+  }
   
   // Build table HTML
   let tableHTML = '';
@@ -74,27 +92,11 @@ async function renderStreamsTable() {
   } else if (filterPlaylistsOnly && playlists.length > 0 && segments.length > 0) {
     tableHTML += `<div class="filter-notice">${playlists.length} playlist(s) shown. ${segments.length} segment(s) hidden.</div>`;
   }
-  
-  tableHTML += `
-    <table class="streams-table">
-      <thead>
-        <tr>
-          <th><input type="checkbox" id="select-all-modern" title="Select all"></th>
-          <th>Name</th>
-          <th>Segment</th>
-          <th>Format</th>
-          <th>Size</th>
-          <th>Link</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-  `;
-  
-  for (const [index, data] of displayStreams) {
-    const rowClass = data.isLive ? 'live-stream' : '';
-    
-    tableHTML += `
+
+  // Helper to render one row
+  const renderRow = ([index, data], extraClass = '') => {
+    const rowClass = (data.isLive ? 'live-stream' : '') + (extraClass ? ' ' + extraClass : '');
+    return `
       <tr class="${rowClass}" data-index="${index}">
         <td><input type="checkbox" class="stream-checkbox" data-index="${index}" ${data.selected ? 'checked' : ''}></td>
         <td><span class="stream-name">${escapeHtml(data.name)}</span></td>
@@ -112,6 +114,35 @@ async function renderStreamsTable() {
         </td>
       </tr>
     `;
+  };
+  
+  tableHTML += `
+    <table class="streams-table">
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="select-all-modern" title="Select all"></th>
+          <th>Name</th>
+          <th>Segment</th>
+          <th>Format</th>
+          <th>Size</th>
+          <th>Link</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  // Pin most recent segment at the top (in "all" mode only)
+  if (pinnedSegment) {
+    tableHTML += `<tr class="pinned-separator"><td colspan="7">Most recent segment</td></tr>`;
+    tableHTML += renderRow(pinnedSegment, 'pinned-row');
+    tableHTML += `<tr class="pinned-separator"><td colspan="7"></td></tr>`;
+  }
+  
+  for (const entry of displayStreams) {
+    // Skip the pinned segment in the main list to avoid duplication
+    if (pinnedSegment && entry[0] === pinnedSegment[0]) continue;
+    tableHTML += renderRow(entry);
   }
   
   tableHTML += `
@@ -120,6 +151,10 @@ async function renderStreamsTable() {
   `;
   
   contentEl.innerHTML = tableHTML;
+
+  // Update sort button text
+  const sortBtn = document.getElementById('sort-toggle-btn');
+  if (sortBtn) sortBtn.textContent = sortDescending ? '↓ Newest' : '↑ Oldest';
   
   // Hook up events
   setupTableEvents();
@@ -380,29 +415,29 @@ async function handleBatchDownload(e) {
  */
 function downloadSingleStream(data, fileHandle) {
   return new Promise((resolve, reject) => {
-    // Set up completion listener
+    let timer;
+
     const onComplete = () => {
+      clearTimeout(timer);
       events.after.delete(onComplete);
       resolve();
     };
     
-    // Check if events.after exists (from original code)
     if (typeof events !== 'undefined' && events.after) {
       events.after.add(onComplete);
     }
     
-    // Set global file handle for original code to use
     self.aFile = fileHandle;
     
-    // Click original download button
     if (data.downloadBtn) {
       data.downloadBtn.click();
     } else {
       reject(new Error('No download button found'));
+      return;
     }
     
     // Timeout after 5 minutes per file
-    setTimeout(() => {
+    timer = setTimeout(() => {
       if (typeof events !== 'undefined' && events.after) {
         events.after.delete(onComplete);
       }

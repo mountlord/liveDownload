@@ -61,7 +61,7 @@ async function startWaiting(tabId, pageUrl) {
   }
   waitingTabs.set(tabId, { pageUrl, startedAt: Date.now() });
   console.log(ts(), `WaitForStart] Started waiting for tab ${tabId}`);
-  return { success: true };
+  return { success: true, checkInterval: settings.checkInterval };
 }
 
 async function stopWaiting(tabId) {
@@ -163,7 +163,23 @@ async function checkAllActiveURLs() {
   isPollingInProgress = true;
   try {
     const list       = await getWRUList();           // defined in wru-manager.js
-    const activeURLs = list.filter(entry => !entry.inactive);
+    const now        = new Date();
+    const nowHHMM    = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+
+    const activeURLs = list.filter(entry => {
+      if (entry.inactive) return false;
+      // If poll window is set, check if current time is within range
+      if (entry.pollStart && entry.pollEnd) {
+        if (entry.pollStart <= entry.pollEnd) {
+          // Same-day window (e.g. 08:00–17:00): outside if before start or after end
+          if (nowHHMM < entry.pollStart || nowHHMM > entry.pollEnd) return false;
+        } else {
+          // Overnight window (e.g. 20:00–07:00): outside if after end AND before start
+          if (nowHHMM > entry.pollEnd && nowHHMM < entry.pollStart) return false;
+        }
+      }
+      return true;
+    });
 
     if (activeURLs.length === 0) {
       console.log(ts(), 'WRU] No active URLs configured');
@@ -273,82 +289,15 @@ async function _allowAutoplay(url) {
 }
 
 /**
- * Inject player initialization clicks into a monitoring tab after page-load delays.
- * Acts as a belt-and-suspenders fallback in case the contentSettings grant above
- * didn't take effect in time, or the player needs an explicit nudge.
- *
- * Many streaming sites (e.g. SOOP/AfreecaTV) defer HLS source initialization until
- * a real user click on the player overlay — calling video.play() alone won't work
- * because the video element has no src yet. We dispatch real MouseEvents to trigger
- * the site's own click handlers, then call video.play() as a final fallback.
+ * Inject autoplay at staggered delays (4s, 8s, 14s) to handle varying page load times.
+ * Delegates to the shared injectAutoplay() from autoplay.js.
  */
-
 function _injectAutoplay(tabId) {
-  const delays = [4000, 8000, 14000];
-  delays.forEach(delay => {
+  [4000, 8000, 14000].forEach(delay => {
     setTimeout(async () => {
-      try {
-        const result = await chrome.scripting.executeScript({
-          target: { tabId },
-          func: () => {
-            function fireClick(el) {
-              ['pointerdown','mousedown','mouseup','click'].forEach(type => {
-                el.dispatchEvent(new MouseEvent(type, {
-                  bubbles: true, cancelable: true, view: window,
-                  clientX: el.getBoundingClientRect().left + el.offsetWidth / 2,
-                  clientY: el.getBoundingClientRect().top  + el.offsetHeight / 2
-                }));
-              });
-            }
-
-            // Strategy 1: known player overlay/stop-screen (SOOP/AfreecaTV)
-            const stopScreen = document.querySelector('#stop_screen');
-            if (stopScreen && stopScreen.offsetParent !== null) {
-              fireClick(stopScreen); return 'stop-screen';
-            }
-
-            // Strategy 2: known player container
-            const playerDiv = document.querySelector('#afreecatv_player');
-            if (playerDiv) { fireClick(playerDiv); return 'player-div'; }
-
-            // Strategy 3: any visible play button by class/text
-            for (const el of document.querySelectorAll('button, [role="button"], a, div')) {
-              if (!el.offsetParent) continue; // skip hidden elements
-              const t = el.textContent?.trim().toLowerCase() || '';
-              const c = el.className?.toLowerCase() || '';
-              const ar = el.getAttribute('aria-label')?.toLowerCase() || '';
-              if (c.includes('btn_play') || c.includes('play-btn') || c.includes('play_btn') ||
-                  ar.includes('play') || t === 'play' || t === '재생') {
-                fireClick(el); return 'play-button:' + (el.className || el.id);
-              }
-            }
-
-            // Strategy 4: click centre of video element — triggers site's click handler
-            const video = document.querySelector('video');
-            if (video) {
-              fireClick(video);
-              // Also try direct play() in case src is already set
-              if (video.paused && video.src) {
-                video.muted = false;
-                const p = video.play();
-                if (p) p.catch(() => { video.muted = true; video.play().catch(() => {}); });
-              }
-              return 'video-click';
-            }
-
-            // Strategy 5: click centre of document body as last resort
-            const body = document.body;
-            if (body) { fireClick(body); return 'body-click'; }
-
-            return 'no-element-found';
-          }
-        });
-        const method = result?.[0]?.result;
-        if (method && method !== 'no-element-found') {
-          console.log(ts(), `WRU] 🎬 Autoplay injected (tab ${tabId}, delay ${delay}ms): ${method}`);
-        }
-      } catch (e) {
-        // Tab may have been closed before this fires — ignore
+      const method = await injectAutoplay(tabId);
+      if (method) {
+        console.log(ts(), `WRU] 🎬 Autoplay injected (tab ${tabId}, delay ${delay}ms): ${method}`);
       }
     }, delay);
   });
@@ -386,36 +335,7 @@ async function processOneURLSequentially(entry, timeoutSeconds) {
     await _allowAutoplay(resolvedUrl);
 
     const bounds = await getMonitoringWindowBounds();
-
-    try {
-      if (_boundsRejected) {
-        // Already know bounds are invalid (RDS disconnected) — skip straight to fallback
-        window = await chrome.windows.create({
-          url: resolvedUrl, type: 'normal', focused: true, state: 'normal'
-        });
-      } else {
-        window = await chrome.windows.create({
-          url:     resolvedUrl,
-          width:   bounds.width,
-          height:  bounds.height,
-          left:    bounds.left,
-          top:     bounds.top,
-          type:    'normal',
-          focused: true,
-          state:   'normal'
-        });
-        _boundsRejected = false;  // success — clear any stale rejection state
-      }
-    } catch (boundsError) {
-      if (!_boundsRejected) {
-        // First failure — log once, then cache the state
-        console.warn(ts(), `WRU] ⚠️ Window bounds rejected (${boundsError.message}) — switching to default positioning`);
-        _boundsRejected = true;
-      }
-      window = await chrome.windows.create({
-        url: resolvedUrl, type: 'normal', focused: true, state: 'normal'
-      });
-    }
+    window = await _createWindowWithFallback(resolvedUrl, 'normal', bounds, true);
 
     monitoringWindowIds.add(window.id);
     await _saveMonitoringWindowIds();  // ← Persist immediately after opening
@@ -437,11 +357,18 @@ async function processOneURLSequentially(entry, timeoutSeconds) {
 
     if (result === 'stream_detected') {
       console.log(ts(), `WRU] ✅ Stream detected for ${resolvedUrl}, auto-record triggered`);
-      // Keep the window open — openWithAutoRecord will close the tab when recording starts
+      // Close the monitoring window — auto-record window is a separate popup
+      try {
+        await chrome.windows.remove(window.id);
+        console.log(ts(), `WRU] 🗑️ Closed monitoring window ${window.id} (stream detected)`);
+      } catch (e) {
+        // Window may have already been closed by handleStreamDetected
+      }
+      monitoringWindowIds.delete(window.id);
+      await _saveMonitoringWindowIds();
     } else if (result === 'aborted') {
       console.log(ts(), `WRU] ⏹️ Monitoring aborted for ${resolvedUrl} (deactivated or closed externally)`);
-      // Close the monitoring window — it may still be open if aborted via deactivateWRU
-      // (as opposed to the tab being closed by the user, where the window is already gone).
+      externallyAbortedTabs.delete(tabId);
       try {
         await chrome.windows.remove(window.id);
         console.log(ts(), `WRU] 🗑️ Closed monitoring window ${window.id} (aborted)`);
@@ -575,8 +502,11 @@ async function handleStreamDetected(tabId, streamCount) {
         }
 
         if (!recordingWindowId) {
-          console.log(ts(), `WaitForStart] ⚠️ No recording after ${maxAttempts * 2}s, keeping tab ${tabId} open`);
+          console.log(ts(), `WaitForStart] ⚠️ No recording after ${maxAttempts * 2}s — closing tab ${tabId}`);
+          try { await chrome.tabs.remove(tabId); } catch (_) {}
         }
+
+        handlingStreamDetected.delete(tabId);  // done — allow re-handling if tab is reused
       } else {
         console.log(ts(), `WaitForStart] Streams disappeared, continuing to wait`);
         handlingStreamDetected.delete(tabId);  // allow retry if streams reappear

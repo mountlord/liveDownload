@@ -132,11 +132,27 @@ function isAlreadyRecording(baseUrl) {
 
 // ---------- Lifecycle ----------
 
-// Clean up when a recording window is closed by the user
+// Clean up when a recording window is closed.
+// If the entry is still in recordingWindows, the recording was NOT cleanly stopped
+// (stop() calls unregisterRecordingWindow() first, removing the entry before the
+// window closes). Show a notification so the user knows what happened.
+// NOTE: Chrome deletes the .crswap swap file when the page is destroyed —
+// unsaved data from the current recording is NOT recoverable.
 chrome.windows.onRemoved.addListener(async (windowId) => {
   if (recordingWindows.has(windowId)) {
-    console.log(ts(), `Recording] Window ${windowId} closed, removing from tracking`);
+    const info = recordingWindows.get(windowId);
+    console.warn(ts(), `Recording] ⚠️ Window ${windowId} closed while recording! Title: ${info.title}, Duration: ${info.duration}, Segments: ${info.segments}`);
+
     recordingWindows.delete(windowId);
     await _saveRecordingWindows();
+
+    chrome.notifications.create('recording-crash-' + windowId, {
+      type: 'basic',
+      iconUrl: '/icons/active/48.png',
+      title: '⚠️ Recording lost',
+      message: `"${info.title || 'Recording'}" (${info.duration || '?'}) was interrupted. Unsaved data is lost.`,
+      priority: 2,
+      requireInteraction: true
+    });
   }
 });

@@ -1,6 +1,6 @@
 {
 	"manifest_version": 3,
-	"version": "0.7.30.17",
+	"version": "0.7.43.1",
 	"name": "liveDownload",
 	"description": "Monitor and record live streams from sites that permit recording",
 	"permissions": [
@@ -21,7 +21,7 @@
 	"host_permissions": [
 	"*://*/*"
 	],
-	"homepage_url": "https://github.com/your-repo/liveDownload",
+	"homepage_url": "https://github.com/mountlord/liveDownload",
 	"background": {
 	"service_worker": "worker.js"
 	},

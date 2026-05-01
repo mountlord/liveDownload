@@ -22,106 +22,18 @@ async function checkAutoRecord() {
     // Show notification immediately
     showNotification('🔄 Auto-record started, waiting for streams to load...', 'info');
     
-    // CRITICAL FIX: Auto-click play button to bypass autoplay block
-    const href = params.get('href');
-    if (href && href.includes('sooplive.co.kr')) {
-      console.log('[modern-ui] Broadcast detected - attempting auto-play to start playback');
-      try {
-        const result = await chrome.scripting.executeScript({
-          target: { tabId: parseInt(tabId) },
-          func: () => {
-            console.log('[Auto-Play] Attempting to start video playback...');
-            
-            // Strategy 1: Call .play() directly on video element (bypasses click requirement)
-            const video = document.querySelector('video');
-            if (video) {
-              console.log('[Auto-Play] Found video element, calling play()...');
-              
-              // Try to unmute first (user might want audio)
-              video.muted = false;
-              video.volume = 1.0;
-              
-              // Call play() and handle the promise
-              const playPromise = video.play();
-              if (playPromise !== undefined) {
-                playPromise.then(() => {
-                  console.log('[Auto-Play] ✓ Video playing successfully (unmuted)');
-                  return { success: true, method: 'video-play-unmuted' };
-                }).catch(error => {
-                  console.log('[Auto-Play] Unmuted play failed:', error.message);
-                  console.log('[Auto-Play] Trying muted playback...');
-                  
-                  // If unmuted fails, try muted (more likely to be allowed)
-                  video.muted = true;
-                  video.play().then(() => {
-                    console.log('[Auto-Play] ✓ Video playing successfully (muted)');
-                  }).catch(err => {
-                    console.error('[Auto-Play] ✗ Muted play also failed:', err.message);
-                  });
-                });
-              }
-              
-              // Return immediately (don't wait for promise)
-              return { success: true, method: 'video-play-direct' };
-            }
-            
-            // Strategy 2: Click the player container as fallback
-            const playerDiv = document.querySelector('#afreecatv_player');
-            if (playerDiv) {
-              console.log('[Auto-Play] No video element, clicking player div...');
-              playerDiv.click();
-              return { success: true, method: 'player-div-click' };
-            }
-            
-            // Strategy 3: Look for stop screen overlay
-            const stopScreen = document.querySelector('#stop_screen');
-            if (stopScreen && stopScreen.offsetParent !== null) {
-              console.log('[Auto-Play] Clicking stop screen overlay...');
-              stopScreen.click();
-              return { success: true, method: 'stop-screen-click' };
-            }
-            
-            // Strategy 4: Find any play button by class or text
-            const playButtons = document.querySelectorAll('button, a, div[role="button"]');
-            for (const btn of playButtons) {
-              const text = btn.textContent?.toLowerCase() || '';
-              const classes = btn.className?.toLowerCase() || '';
-              if (text.includes('play') || classes.includes('play') || 
-                  text.includes('재생') || classes.includes('btn_play')) {
-                console.log('[Auto-Play] Found play button:', btn);
-                btn.click();
-                return { success: true, method: 'play-button-click' };
-              }
-            }
-            
-            console.log('[Auto-Play] No playback method found');
-            return { success: false, error: 'no-element-found' };
-          }
-        });
-        
-        const playResult = result[0]?.result;
-        if (playResult?.success) {
-          console.log(`[modern-ui] ✓ Auto-play successful (method: ${playResult.method})`);
-          showNotification('▶️ Auto-started video playback', 'success');
-        } else {
-          console.warn('[modern-ui] Auto-play failed:', playResult?.error);
-          showNotification('⚠️ Could not auto-start playback - streams may not load', 'warning');
-        }
-      } catch (e) {
-        console.error('[modern-ui] Error during Auto-play:', e);
-        
-        if (e.message && e.message.includes('No tab with id')) {
-          console.error('[modern-ui] Tab not found! The tab may have been closed or the tab ID is incorrect.');
-          console.error('[modern-ui] Expected tab ID:', tabId);
-          showNotification('⚠️ Tab not found - cannot auto-start playback. Please click play manually.', 'error');
-        } else {
-          console.error('[modern-ui] Unexpected error:', e.message);
-          showNotification('⚠️ Auto-play failed - you may need to click play manually', 'warning');
-        }
+    // Inject autoplay into the source tab to start playback.
+    // Uses the shared injectAutoplay() from autoplay.js — platform-agnostic.
+    const sourceTabId = parseInt(tabId);
+    if (sourceTabId) {
+      console.log('[modern-ui] Attempting auto-play on source tab', sourceTabId);
+      const method = await injectAutoplay(sourceTabId);
+      if (method) {
+        console.log(`[modern-ui] ✓ Auto-play successful: ${method}`);
+      } else {
+        console.warn('[modern-ui] Auto-play: no playable element found');
       }
-      
-      // Give extra time for streaming to start streams after playback starts
-      console.log('[modern-ui] Waiting extra 3 seconds after auto-play for streams to appear...');
+      // Give extra time for streaming to start after playback starts
       await new Promise(resolve => setTimeout(resolve, 3000));
     }
     
@@ -221,53 +133,41 @@ async function triggerAutoRecord(attempt) {
   
   console.log(`[modern-ui] Checked ${checkedStreams} m3u8 stream(s)`);
   
-  // CRITICAL FIX: Always use first m3u8 as fallback for auto-record
-  // The WRU system already verified the stream exists, so trust it
   if (!bestStream) {
-    console.log('[modern-ui] No confirmed live stream, using first m3u8 (trusted from WRU detection)...');
-    for (const [index, data] of streamData) {
-      if (data.ext === 'm3u8') {
-        bestStream = data;
-        console.log('[modern-ui] ✓ Using m3u8 stream for auto-record:', data.name || data.url.substring(0, 50));
-        break;
-      }
-    }
-  }
-  
-  if (!bestStream) {
-    console.error('[modern-ui] CRITICAL: No m3u8 stream found in streamData!');
-    console.error('[modern-ui] This should not happen if WRU detected streams');
-    showNotification('Auto-record failed: No m3u8 stream available', 'error');
+    // No confirmed live stream. The page may have VOD replays but the broadcaster
+    // is offline. Abort auto-record — the next WRU poll will check again.
+    console.log('[modern-ui] No live stream confirmed — broadcaster may be offline (only VOD/replays detected)');
+    showNotification('Auto-record: no live stream found, will retry at next poll', 'info');
     return;
   }
   
-  // AUTO-RECORD: Delegate all directory handling to LiveMonitor.start().
-  // LiveMonitor.requestDirectoryAccess() is the single source of truth —
-  // it handles permission checks, reauth banners, and OPFS fallback correctly.
-  // Passing null fileHandle tells start() to create the file itself after
-  // resolving directory access (including showing the reauth banner if needed).
+  // AUTO-RECORD: Route through the SAME pipeline as manual download.
+  //
+  // Instead of constructing LiveMonitor directly (which bypasses the form submit
+  // handler, events.before/after, unload.js, and all plugins), we:
+  //   1. Set self.aFile to a proxy object → skips the file picker dialog
+  //   2. Click the hidden download button → triggers form#hrefs submit
+  //   3. Submit handler → events.before → parse() → download() → LiveMonitor
+  //
+  // The proxy has _autoRecord:true so download() passes null to LiveMonitor.start(),
+  // letting it create the file itself after directory resolution and title translation.
   const baseName = (bestStream.name || 'recording').replace(/[\\/:*?"<>|]/g, '_');
 
-  console.log('[modern-ui] Starting auto-record for:', bestStream.name);
-  console.log('[modern-ui] Parameters: url:', bestStream.url.substring(0, 80));
-  console.log('[modern-ui] Parameters: baseName:', baseName);
+  console.log('[modern-ui] Auto-record: routing through unified pipeline');
+  console.log('[modern-ui] baseName:', baseName);
 
-  try {
-    const monitor = new window.LiveMonitor(bestStream.url, baseName, 'ts');
-    console.log('[modern-ui] LiveMonitor created, starting recording...');
-
-    // Pass null fileHandle — LiveMonitor will resolve directory access,
-    // show the reauth banner if needed, and create the file itself.
-    await monitor.start([], null);
-
-    console.log('[modern-ui] ✓✓✓ Auto-record started successfully ✓✓✓');
-
-  } catch (e) {
-    console.error('[modern-ui] ✗✗✗ Auto-record FAILED ✗✗✗');
-    console.error('[modern-ui] Error:', e.message);
-    console.error('[modern-ui] bestStream:', bestStream);
-    showNotification(`Auto-record failed: ${e.message}`, 'error');
+  if (!bestStream.downloadBtn) {
+    console.error('[modern-ui] No download button reference for stream — cannot route through pipeline');
+    showNotification('Auto-record failed: stream entry not ready', 'error');
+    return;
   }
+
+  // Proxy object: has .name for filename extraction, .stat for events.after,
+  // and ._autoRecord flag so download() passes null to LiveMonitor.start()
+  self.aFile = { name: baseName + '.ts', _autoRecord: true, stat: { index: 1, total: 1 } };
+  bestStream.downloadBtn.click();
+
+  console.log('[modern-ui] ✓ Auto-record routed through form submit pipeline');
 }
 
 // ===========================================

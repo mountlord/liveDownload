@@ -151,7 +151,7 @@ class VodDownloader {
   // Fetch with retry
   // ---------------------------------------------------------------------------
 
-  async _fetchWithRetry(item, position) {
+  async _fetchWithRetry(item, position, _depth = 0) {
     let lastError;
     let delay = this.retryDelay;
 
@@ -177,18 +177,17 @@ class VodDownloader {
       }
     }
 
-    // All retries exhausted — give the caller a chance to override the URL
-    if (this.onError) {
+    // All retries exhausted — give the caller a chance to override the URL (max 3 times)
+    if (this.onError && _depth < 3) {
       const url  = item.url || this._resolveUrl(item.seg);
       const newUrl = await this.onError(lastError, url);
       if (newUrl) {
-        // Retry once with the overridden URL
         if (item.type === 'init') {
           item.url = newUrl;
         } else {
           item.seg = { ...item.seg, resolvedUri: newUrl };
         }
-        return this._fetchWithRetry(item, position);
+        return this._fetchWithRetry(item, position, _depth + 1);
       }
     }
 

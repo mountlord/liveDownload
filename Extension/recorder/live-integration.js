@@ -3,7 +3,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.7.30.08';
+  const VERSION = chrome.runtime.getManifest().version;
   console.log(`[liveDownload] Loading v${VERSION}...`);
 
   // ─── Constants ──────────────────────────────────────────────────────────────
@@ -11,6 +11,7 @@
   const POLL_INTERVAL               = 3000;   // ms between manifest polls
   const SEEN_SET_MAX_SIZE           = 2000;   // max segment URLs remembered
   const MAX_SEGMENT_RETRIES         = 3;
+  const MAX_PENDING_SEGMENTS        = 500;   // cap queue to prevent memory bloat during write failures
   const SEGMENT_TIMEOUT             = 30000;  // ms
   const MANIFEST_TIMEOUT            = 10000;  // ms
   const DEFAULT_RECOVERY_POLL_INTERVAL      = 5;    // minutes
@@ -81,18 +82,19 @@
   class BoundedSet {
     constructor(maxSize) {
       this.maxSize = maxSize;
-      this.set     = new Set();
-      this.queue   = [];
+      this._map    = new Map();  // insertion-ordered — oldest first
     }
-    has(v)  { return this.set.has(v); }
+    has(v)  { return this._map.has(v); }
     add(v)  {
-      if (this.set.has(v)) return;
-      this.set.add(v);
-      this.queue.push(v);
-      while (this.queue.length > this.maxSize) this.set.delete(this.queue.shift());
+      if (this._map.has(v)) return;
+      this._map.set(v, true);
+      if (this._map.size > this.maxSize) {
+        // Delete oldest entry (first key in iteration order)
+        this._map.delete(this._map.keys().next().value);
+      }
     }
-    get size() { return this.set.size; }
-    clear() { this.set.clear(); this.queue = []; }
+    get size() { return this._map.size; }
+    clear() { this._map.clear(); }
   }
 
   // ─── HLS playlist helpers ───────────────────────────────────────────────────
@@ -179,50 +181,13 @@
   // ─── Tab autoplay injection ─────────────────────────────────────────────────
 
   /**
-   * Inject player-click events into a tab to bypass certain autoplay gate.
-   * Used during recovery polling when a new monitoring tab is opened.
+   * Inject autoplay into a tab during recovery polling.
+   * Delegates to the shared injectAutoplay() from autoplay.js.
    */
   async function _injectTabAutoplay(tabId) {
-    try {
-      const result = await chrome.scripting.executeScript({
-        target: { tabId },
-        func: () => {
-          function fireClick(el) {
-            ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach(type =>
-              el.dispatchEvent(new MouseEvent(type, {
-                bubbles: true, cancelable: true, view: window,
-                clientX: el.getBoundingClientRect().left + el.offsetWidth  / 2,
-                clientY: el.getBoundingClientRect().top  + el.offsetHeight / 2
-              }))
-            );
-          }
-
-          const stopScreen = document.querySelector('#stop_screen');
-          if (stopScreen?.offsetParent) { fireClick(stopScreen); return 'stop-screen'; }
-
-          const playerDiv = document.querySelector('#afreecatv_player');
-          if (playerDiv) { fireClick(playerDiv); return 'player-div'; }
-
-          for (const el of document.querySelectorAll('button,[role="button"],a,div')) {
-            if (!el.offsetParent) continue;
-            const c  = el.className?.toLowerCase()          || '';
-            const ar = el.getAttribute('aria-label')?.toLowerCase() || '';
-            if (c.includes('btn_play') || c.includes('play-btn') || ar.includes('play')) {
-              fireClick(el); return 'play-button';
-            }
-          }
-
-          const video = document.querySelector('video');
-          if (video) { fireClick(video); return 'video-click'; }
-          return 'no-element';
-        }
-      });
-      const method = result?.[0]?.result;
-      if (method && method !== 'no-element') {
-        console.log(`[liveDownload] 🎬 Recovery tab autoplay injected (tab ${tabId}): ${method}`);
-      }
-    } catch {
-      // Tab may not be ready yet — caller will retry
+    const method = await injectAutoplay(tabId);
+    if (method) {
+      console.log(`[liveDownload] 🎬 Recovery tab autoplay injected (tab ${tabId}): ${method}`);
     }
   }
 
@@ -381,6 +346,13 @@
             }
           }
           if (newCount > 0) {
+            // Cap queue to prevent memory bloat if writes stall
+            if (this.pendingSegments.length > MAX_PENDING_SEGMENTS) {
+              const dropped = this.pendingSegments.length - MAX_PENDING_SEGMENTS;
+              this.pendingSegments.splice(0, dropped);
+              this.metrics.segmentsFailed += dropped;
+              console.warn(`[liveDownload] ⚠️ Queue overflow — dropped ${dropped} oldest segments (cap: ${MAX_PENDING_SEGMENTS})`);
+            }
             console.log(`[liveDownload] +${newCount} segments (total: ${this.metrics.segmentsFound}, pending: ${this.pendingSegments.length})`);
             this.updateUI();
           }
@@ -433,17 +405,20 @@
       while (this.pendingSegments.length > 0 && this.active && !this.stopping && !this.isInRecoveryMode) {
         this.downloadInFlight = true;
 
-        const segment = this.pendingSegments.shift();
-        const success = await this.downloadSegment(segment);
+        try {
+          const segment = this.pendingSegments.shift();
+          const success = await this.downloadSegment(segment);
 
-        if (!success && segment._retriable && segment.retryCount < MAX_SEGMENT_RETRIES) {
-          segment.retryCount++;
-          this.pendingSegments.push(segment);
-          this.metrics.segmentsRetried++;
-          console.log(`[liveDownload] Segment queued for retry (attempt ${segment.retryCount}/${MAX_SEGMENT_RETRIES})`);
+          if (!success && segment._retriable && segment.retryCount < MAX_SEGMENT_RETRIES) {
+            segment.retryCount++;
+            this.pendingSegments.push(segment);
+            this.metrics.segmentsRetried++;
+            console.log(`[liveDownload] Segment queued for retry (attempt ${segment.retryCount}/${MAX_SEGMENT_RETRIES})`);
+          }
+        } finally {
+          this.downloadInFlight = false;
         }
 
-        this.downloadInFlight = false;
         this.updateUI();
       }
     }
@@ -460,9 +435,16 @@
       const url = segment.resolvedUri || segment.uri;
       segment._retriable = false;
 
-      // WASM must be loaded — no JS fallback by design
+      // WASM must be loaded — no JS fallback by design.
+      // Module scripts defer after classic scripts, so on cold start __ldWasm
+      // may not be set yet.  Await the loader's ready promise before giving up.
       if (!window.__ldWasm?.SegmentFetcher) {
-        throw new Error('[liveDownload] WASM module not loaded — cannot record. Reload the extension.');
+        if (window.__ldWasmReady) {
+          await window.__ldWasmReady;
+        }
+        if (!window.__ldWasm?.SegmentFetcher) {
+          throw new Error('[liveDownload] WASM module not loaded — cannot record. Reload the extension.');
+        }
       }
 
       // Lazily create one SegmentFetcher per LiveMonitor instance
@@ -596,6 +578,7 @@
         this.recoveryPollInterval    = s['liveDownload_recoveryPollInterval'];
         this.maxErrorsBeforeRecovery = s['liveDownload_maxErrorsBeforeRecovery'];
         this.translateTitles         = s['liveDownload_translateTitles'];
+
         console.log(`[liveDownload] Settings: resilientMode=${this.resilientMode}, recoveryPollInterval=${this.recoveryPollInterval}min, maxErrorsBeforeRecovery=${this.maxErrorsBeforeRecovery}, translateTitles=${this.translateTitles}`);
       } catch {
         console.warn('[liveDownload] Could not load settings, using defaults');
@@ -603,25 +586,7 @@
     }
 
     /** Reload settings mid-session (called on first error of each error batch). */
-    async reloadSettings() {
-      try {
-        const s = await chrome.storage.local.get({
-          'liveDownload_resilientMode':            true,
-          'liveDownload_maxManifestErrors':        10,
-          'liveDownload_recoveryPollInterval':     DEFAULT_RECOVERY_POLL_INTERVAL,
-          'liveDownload_maxErrorsBeforeRecovery':  DEFAULT_MAX_ERRORS_BEFORE_RECOVERY,
-          'liveDownload_translateTitles':          false
-        });
-        this.resilientMode           = s['liveDownload_resilientMode'];
-        this.maxManifestErrors       = s['liveDownload_maxManifestErrors'];
-        this.recoveryPollInterval    = s['liveDownload_recoveryPollInterval'];
-        this.maxErrorsBeforeRecovery = s['liveDownload_maxErrorsBeforeRecovery'];
-        this.translateTitles         = s['liveDownload_translateTitles'];
-        console.log(`[liveDownload] Settings reloaded: maxErrorsBeforeRecovery=${this.maxErrorsBeforeRecovery}`);
-      } catch {
-        console.warn('[liveDownload] Could not reload settings');
-      }
-    }
+    async reloadSettings() { return this._loadSettings(); }
 
     // ── Filename resolution ───────────────────────────────────────────────────
 
@@ -760,7 +725,25 @@
         }
       }
 
-      // No directory configured at all — ask user (requires user gesture from clicking Record)
+      // No directory configured at all.
+      // Auto-record can't show a picker (no user gesture) — fall back to OPFS.
+      // Manual recording can show the picker because the user clicked a button.
+      const params2 = new URLSearchParams(window.location.search);
+      if (params2.get('autoRecord') === 'true') {
+        console.log('[liveDownload] Auto-record: no directory configured, falling back to OPFS');
+        try {
+          this.directoryHandle          = await navigator.storage.getDirectory();
+          this.directoryName            = 'Downloads';
+          this.usingOPFS                = true;
+          window._liveDownloadDirectory = this.directoryHandle;
+          console.log('[liveDownload] Using OPFS (will trigger download on completion)');
+          return true;
+        } catch (e) {
+          console.error('[liveDownload] OPFS access failed:', e);
+          return false;
+        }
+      }
+
       try {
         this.directoryHandle          = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'downloads' });
         this.directoryName            = this.directoryHandle.name || 'Downloads';
@@ -856,6 +839,30 @@
       // 4. Show live recording UI
       this.showUI();
 
+      // Guard against accidental window close.
+      // Layer 1: beforeunload — shows "Leave site?" confirmation dialog.
+      //   Must set returnValue to a NON-EMPTY string — Chrome ignores empty strings.
+      //   Matches the pattern in plugins/unload.js that works for VOD downloads.
+      this._beforeUnloadHandler = e => {
+        e.preventDefault();
+        e.returnValue = 'Recording in progress...';
+        return e.returnValue;
+      };
+      window.addEventListener('beforeunload', this._beforeUnloadHandler);
+
+      // Layer 2: pagehide — last-chance logging.
+      //   The writable stream cannot be closed here (it's async and Chrome tears
+      //   down the page before it completes).  However, the data IS on disk —
+      //   every write() goes to a .crswap swap file in real time.  If the window
+      //   closes without a clean stop, the service worker will notify the user
+      //   that the .crswap file is recoverable (see recording-registry.js).
+      this._pagehideHandler = () => {
+        if (this.active && this.outputWritable) {
+          console.warn('[liveDownload] ⚠️ Window closing while recording — data is in .crswap file');
+        }
+      };
+      window.addEventListener('pagehide', this._pagehideHandler);
+
       // 5. Resolve directory access
       const dirResult = await this.requestDirectoryAccess();
 
@@ -940,6 +947,8 @@
           await this.processQueue();
         } catch (e) {
           console.error('[liveDownload] Loop error:', e);
+          // Safety: ensure downloadInFlight is cleared so processQueue isn't permanently stuck
+          this.downloadInFlight = false;
         }
 
         if (this.active && !this.stopping) await sleep(POLL_INTERVAL);
@@ -956,6 +965,16 @@
       this.stopping = true;
       this.active   = false;
 
+      // Remove the unload guards — recording is ending intentionally
+      if (this._beforeUnloadHandler) {
+        window.removeEventListener('beforeunload', this._beforeUnloadHandler);
+        this._beforeUnloadHandler = null;
+      }
+      if (this._pagehideHandler) {
+        window.removeEventListener('pagehide', this._pagehideHandler);
+        this._pagehideHandler = null;
+      }
+
       console.log('[liveDownload] Stopping...');
       this.stopRecoveryPolling();
 
@@ -965,12 +984,15 @@
       const statusText = document.getElementById('live-status-text');
       if (statusText) statusText.textContent = 'FINALIZING...';
 
-      // Wait for any in-flight check/download
+      // Wait briefly for any in-flight check/download (max 5s, not 30)
       let waitCount = 0;
-      while ((this.checkInFlight || this.downloadInFlight) && waitCount < 30) {
-        await sleep(1000);
+      while ((this.checkInFlight || this.downloadInFlight) && waitCount < 10) {
+        await sleep(500);
         waitCount++;
       }
+      // Force-clear in case of stuck state (e.g. write loop crash)
+      this.checkInFlight    = false;
+      this.downloadInFlight = false;
 
       // Drain up to 10 remaining segments
       if (this.pendingSegments.length > 0) {
@@ -1130,12 +1152,9 @@
       if (this.recoveryStartTime) {
         const elapsedMin = (Date.now() - this.recoveryStartTime) / 60_000;
         if (elapsedMin >= 10) {
-          console.log(`[liveDownload] ⏱️ Recovery timeout: ${elapsedMin.toFixed(1)} min — closing window`);
-          this.stopRecoveryPolling();
+          console.log(`[liveDownload] ⏱️ Recovery timeout: ${elapsedMin.toFixed(1)} min — ending recording`);
           this.showNotification('Stream recovery timed out after 10 minutes. Recording ended.', 'error');
-          setTimeout(async () => {
-            try { await chrome.windows.remove((await chrome.windows.getCurrent()).id); } catch { }
-          }, 3000);
+          await this.stop();
           return;
         }
       }
@@ -1259,6 +1278,7 @@
 
       try {
         await this._openOutputFile(newFilename);
+        this.fileIncrement++;
 
         // Reset per-file metrics; keep cumulative bytesDownloaded
         this.metrics.segmentsFound              = 0;
@@ -1339,22 +1359,23 @@
 
     async checkReenterWaiting() {
       try {
-        const params   = new URLSearchParams(window.location.search);
-        const pageUrl  = params.get('href');
+        const params       = new URLSearchParams(window.location.search);
+        const pageUrl      = params.get('href');
+        const isAutoRecord = params.get('autoRecord') === 'true';
 
+        // Restore the URL to the WRU watch list so the next poll cycle picks it up.
+        // Do NOT call startWaiting with the original tab ID — that monitoring tab was
+        // closed when recording started. The next poll will open a fresh one.
         if (pageUrl) {
-          console.log('[liveDownload] Restoring WRU waiting state for:', pageUrl);
+          console.log('[liveDownload] Restoring WRU URL for future polling:', pageUrl);
           await chrome.runtime.sendMessage({ method: 'wru-restoreWaiting', url: pageUrl });
         }
 
         const settings = await chrome.storage.local.get({ autoclose: false });
-        if (settings.autoclose) {
-          const tabId = parseInt(params.get('tabId'));
-          if (tabId && pageUrl) {
-            console.log('[liveDownload] Auto-close ON — re-entering waiting mode for tab', tabId);
-            await chrome.runtime.sendMessage({ method: 'waitForStart-start', tabId, pageUrl });
-            setTimeout(() => window.close(), 2000);
-          }
+
+        if (isAutoRecord || settings.autoclose) {
+          console.log(`[liveDownload] Auto-close (${isAutoRecord ? 'auto-record' : 'autoclose setting'})`);
+          setTimeout(() => window.close(), 2000);
         }
       } catch (e) {
         console.warn('[liveDownload] Error checking re-enter waiting:', e);
@@ -1576,20 +1597,10 @@
     }
 
     showNotification(message, type = 'info') {
-      const colors = { warning: '#f59e0b', error: '#ef4444', success: '#10b981', info: '#3b82f6' };
-      const el     = document.createElement('div');
-      el.textContent = message;
-      el.style.cssText = `
-        position:fixed;bottom:80px;right:20px;max-width:400px;padding:12px 16px;
-        background:${colors[type] ?? colors.info};color:#fff;border-radius:8px;
-        font-size:13px;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,0.3);
-        z-index:10001;animation:slideInRight 0.3s ease-out;
-      `;
-      document.body.appendChild(el);
-      setTimeout(() => {
-        el.style.animation = 'slideOutRight 0.3s ease-out';
-        setTimeout(() => el.remove(), 300);
-      }, 5000);
+      // Delegate to the global showNotification from ui/utils.js
+      if (typeof window.showNotification === 'function' && window.showNotification !== this.showNotification) {
+        window.showNotification(message, type);
+      }
     }
 
     logMetrics() {

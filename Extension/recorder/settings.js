@@ -18,6 +18,7 @@
     MAX_ERRORS_BEFORE_RECOVERY: 'liveDownload_maxErrorsBeforeRecovery',
     TRANSLATE_TITLES: 'liveDownload_translateTitles',
     FILENAME: 'filename',
+    FILENAME_VOD: 'filenameVOD',
     THREADS: 'threads',
     ERROR_TOLERANCE: 'error-tolerance',
     DEFAULT_FORMAT: 'default-format',
@@ -44,6 +45,7 @@
     [SETTINGS_KEYS.MAX_ERRORS_BEFORE_RECOVERY]: 100,  // ~5 min of errors
     [SETTINGS_KEYS.TRANSLATE_TITLES]: false,  // OFF by default
     [SETTINGS_KEYS.FILENAME]: '【[q:.nick|textContent|Unknown]】[title]',
+    [SETTINGS_KEYS.FILENAME_VOD]: '[title]',
     [SETTINGS_KEYS.THREADS]: 3,
     [SETTINGS_KEYS.ERROR_TOLERANCE]: 30,
     [SETTINGS_KEYS.DEFAULT_FORMAT]: 'ts',
@@ -228,6 +230,9 @@
     const filename = document.getElementById('settings-filename');
     if (filename) filename.value = currentSettings[SETTINGS_KEYS.FILENAME];
     
+    const filenameVOD = document.getElementById('settings-filename-vod');
+    if (filenameVOD) filenameVOD.value = currentSettings[SETTINGS_KEYS.FILENAME_VOD];
+    
     // Batch size
     const batchSlider = document.getElementById('batch-size');
     const batchValue = document.getElementById('batch-size-value');
@@ -278,9 +283,9 @@
     const errorTolerance = document.getElementById('settings-error-tolerance');
     if (errorTolerance) errorTolerance.value = currentSettings[SETTINGS_KEYS.ERROR_TOLERANCE];
     
-    // IMPORTANT: Sync to original element that helper.js reads for file picker — always TS
+    // Sync to original element that helper.js reads for file picker
     const originalFormat = document.getElementById('default-format');
-    if (originalFormat) originalFormat.value = 'ts';
+    if (originalFormat) originalFormat.value = currentSettings[SETTINGS_KEYS.DEFAULT_FORMAT];
     
     const quality = document.getElementById('settings-quality');
     if (quality) quality.value = currentSettings[SETTINGS_KEYS.QUALITY];
@@ -382,6 +387,7 @@
       // Gather values from UI
       const newSettings = {
         [SETTINGS_KEYS.FILENAME]: document.getElementById('settings-filename')?.value || '[title]',
+        [SETTINGS_KEYS.FILENAME_VOD]: document.getElementById('settings-filename-vod')?.value || '[title]',
         [SETTINGS_KEYS.BATCH_SIZE]: parseInt(document.getElementById('batch-size')?.value || 50),
         [SETTINGS_KEYS.AUTO_CONCAT]: document.getElementById('auto-concat')?.checked || false,
         [SETTINGS_KEYS.LIVE_THREADS]: parseInt(document.getElementById('live-threads')?.value || 1),
@@ -392,7 +398,7 @@
         [SETTINGS_KEYS.TRANSLATE_TITLES]: document.getElementById('translate-titles')?.checked || false,
         [SETTINGS_KEYS.THREADS]: parseInt(document.getElementById('settings-threads')?.value || 3),
         [SETTINGS_KEYS.ERROR_TOLERANCE]: parseInt(document.getElementById('settings-error-tolerance')?.value || 30),
-        [SETTINGS_KEYS.DEFAULT_FORMAT]: 'ts',
+        [SETTINGS_KEYS.DEFAULT_FORMAT]: document.getElementById('default-format')?.value || 'ts',
         [SETTINGS_KEYS.QUALITY]: document.getElementById('settings-quality')?.value || 'highest',
         [SETTINGS_KEYS.AUTO_CLOSE]: document.getElementById('settings-autoclose')?.checked || false,
         [SETTINGS_KEYS.MIME_WATCH]: document.getElementById('settings-mime-watch')?.checked || false,

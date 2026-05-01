@@ -82,6 +82,61 @@ async function getMonitoringWindowBounds() {
 // ---------- Window creation ----------
 
 /**
+ * Create a Chrome window with a 3-level fallback chain:
+ *   1. Full bounds (width, height, left, top)
+ *   2. Size only (drop position)
+ *   3. Minimal (let Chrome decide everything)
+ *
+ * Caches bounds-rejection state so RDP sessions don't spam warnings.
+ *
+ * @param {string} url
+ * @param {string} type    — 'popup' for recorder, 'normal' for monitoring
+ * @param {object} [bounds]  — { width, height, left, top }
+ * @param {boolean} [focused]
+ * @returns {Promise<chrome.windows.Window>}
+ */
+async function _createWindowWithFallback(url, type, bounds = null, focused = true) {
+  // Level 1: full bounds (skip if we know they'll fail)
+  if (bounds && !_boundsRejected) {
+    try {
+      const win = await chrome.windows.create({
+        url, type, focused,
+        width:  bounds.width,
+        height: bounds.height,
+        left:   bounds.left,
+        top:    bounds.top,
+        ...(type === 'normal' ? { state: 'normal' } : {})
+      });
+      _boundsRejected = false;
+      return win;
+    } catch (e) {
+      if (!_boundsRejected) {
+        console.warn(ts(), `WRU] ⚠️ Window bounds rejected (${e.message}) — switching to fallback`);
+        _boundsRejected = true;
+      }
+    }
+  }
+
+  // Level 2: size only (for popup windows) or minimal (for normal)
+  if (bounds && type === 'popup') {
+    try {
+      return await chrome.windows.create({
+        url, type, focused,
+        width: bounds.width, height: bounds.height
+      });
+    } catch (e) {
+      console.warn(ts(), `WRU] ⚠️ Size also rejected: ${e.message}`);
+    }
+  }
+
+  // Level 3: minimal — let Chrome decide
+  return await chrome.windows.create({
+    url, type, focused,
+    ...(type === 'normal' ? { state: 'normal' } : {})
+  });
+}
+
+/**
  * Open a monitoring window for a URL and track its ID.
  * @param {string} url
  * @param {boolean} [focused=false]
@@ -90,12 +145,7 @@ async function getMonitoringWindowBounds() {
 async function openMonitoringWindow(url, focused = false) {
   console.log(ts(), `WRU] Opening monitoring window for ${url} (focused: ${focused})`);
   try {
-    const newWindow = await chrome.windows.create({
-      url,
-      type: 'normal',
-      focused,
-      state: 'normal'
-    });
+    const newWindow = await _createWindowWithFallback(url, 'normal', null, focused);
     monitoringWindowIds.add(newWindow.id);
     await _saveMonitoringWindowIds();
     const tabs = await chrome.tabs.query({ windowId: newWindow.id });
@@ -136,8 +186,6 @@ async function openWithAutoRecord(tab) {
 
     const win = await chrome.windows.getCurrent();
     const prefs = await chrome.storage.local.get({ width: 1000, height: 750 });
-    const left = win.left + Math.round((win.width - 1000) / 2);
-    const top  = win.top  + Math.round((win.height - 750) / 2);
 
     const args = new URLSearchParams();
     args.set('tabId',      tab.id);
@@ -148,36 +196,12 @@ async function openWithAutoRecord(tab) {
     const fullUrl = '/recorder/index.html?' + args.toString();
     console.log(ts(), `WaitForStart] Full URL: ${fullUrl}`);
 
-    let newWindow;
-    try {
-      newWindow = await chrome.windows.create({
-        url: fullUrl,
-        width: prefs.width,
-        height: prefs.height,
-        left,
-        top,
-        type: 'normal',
-        focused: true
-      });
-    } catch (boundsError) {
-      // Calculated bounds are outside visible screen space (common when RDS is disconnected).
-      // Drop all position and size constraints and let Chrome place the window.
-      console.warn(ts(), `WaitForStart] ⚠️ Bounds rejected (${boundsError.message}), retrying without position/size`);
-      try {
-        newWindow = await chrome.windows.create({
-          url: fullUrl,
-          type: 'normal',
-          focused: true
-        });
-      } catch (e2) {
-        // Still failing — RDS session has no screen at all. Open as popup instead.
-        console.warn(ts(), `WaitForStart] ⚠️ Normal window failed too, trying popup`);
-        newWindow = await chrome.windows.create({
-          url: fullUrl,
-          type: 'popup'
-        });
-      }
-    }
+    const newWindow = await _createWindowWithFallback(fullUrl, 'popup', {
+      width:  prefs.width,
+      height: prefs.height,
+      left:   win.left + Math.round((win.width  - 1000) / 2),
+      top:    win.top  + Math.round((win.height -  750) / 2)
+    }, true);
 
     console.log(ts(), `WaitForStart] Window created with id: ${newWindow.id}`);
 

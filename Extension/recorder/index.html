@@ -289,6 +289,7 @@ The search pattern is a RegExp. For instance, <\s, _> replaces all spaces in the
   <script type="text/javascript" src="extract.js"></script>
   <script type="text/javascript" src="parse.js"></script>
   <script type="text/javascript" src="build.js"></script>
+  <script type="text/javascript" src="/autoplay.js"></script>
   <script type="text/javascript" src="live-integration.js"></script>
   <script type="text/javascript" src="settings.js"></script>
   <script type="text/javascript" src="ui/utils.js"></script>
@@ -423,6 +424,7 @@ The search pattern is a RegExp. For instance, <\s, _> replaces all spaces in the
             <input type="checkbox" id="translate-titles">
           </div>
         </div>
+
       
       <!-- Wait for Start Settings -->
       <div class="settings-section">
@@ -475,11 +477,21 @@ The search pattern is a RegExp. For instance, <\s, _> replaces all spaces in the
 
         <div class="setting-row">
           <div class="setting-label">
-            <span class="setting-label-main">Filename Extraction</span>
-            <span class="setting-label-desc">Use [meta.name], [title], [hostname], [q:query|method|default]</span>
+            <span class="setting-label-main">Live Recording Filename</span>
+            <span class="setting-label-desc">Template for live stream recordings. Tokens: [title], [hostname], [q:selector|method|default]</span>
           </div>
           <div class="setting-control">
             <input type="text" id="settings-filename" value="[meta.name]" style="min-width: 250px; font-family: monospace;">
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-label">
+            <span class="setting-label-main">VOD Download Filename</span>
+            <span class="setting-label-desc">Template for VOD downloads. Same tokens as above. [title] usually contains the streamer name for VODs.</span>
+          </div>
+          <div class="setting-control">
+            <input type="text" id="settings-filename-vod" value="[title]" style="min-width: 250px; font-family: monospace;">
           </div>
         </div>
 

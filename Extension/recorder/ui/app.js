@@ -54,6 +54,13 @@ function setupStreamFilter() {
         renderStreamsTable();
       });
     }
+    const sortBtn = document.getElementById('sort-toggle-btn');
+    if (sortBtn) {
+      sortBtn.addEventListener('click', () => {
+        sortDescending = !sortDescending;
+        renderStreamsTable();
+      });
+    }
   }, 100);
 }
 
@@ -174,6 +181,7 @@ function injectModernUI() {
             <input type="checkbox" id="filter-playlists-only" checked>
             <span>Playlists Only</span>
           </label>
+          <button class="sort-toggle-btn" id="sort-toggle-btn" title="Sort order: newest first / oldest first">↑ Oldest</button>
         </div>
       </div>
       <div id="streams-content">
@@ -393,7 +401,7 @@ function extractAndStoreEntry(entryNode) {
     ext: meta.ext || '',
     size: sizeEl?.textContent || '',
     href: entry.url,
-    isLive: false,
+    isLive: null,   // null = not checked yet, true/false = checked
     selected: false
   };
   
@@ -408,5 +416,5 @@ function extractAndStoreEntry(entryNode) {
 // TABLE RENDERING
 // ===========================================
 
-// Refresh status counts every 30 seconds
-setInterval(updateHeaderStatusCounts, 30000);
+// Refresh status counts every 90 seconds (30s was too aggressive — 12+ API calls per wake)
+setInterval(updateHeaderStatusCounts, 90000);

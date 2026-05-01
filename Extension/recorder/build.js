@@ -13,8 +13,22 @@ const response = ({url, responseHeaders = []}) => {
 
 const addEntries = async entries => {
   const prefs = await chrome.storage.local.get({
-    'filename': '[title]' // [meta.name], [title], [hostname], [q:query|method|default-value]
+    'filename': '【[q:.nick|textContent|Unknown]】[title]',
+    'filenameVOD': '[title]'
   });
+
+  // Detect VOD vs Live from the source page URL
+  const href = args.get('href') || '';
+  let isVOD = false;
+  try {
+    const u = new URL(href);
+    isVOD = u.hostname.includes('vod') || u.pathname.includes('/videos/');
+  } catch (_) {}
+
+  // Select the appropriate template
+  prefs.filename = isVOD ? (prefs.filenameVOD || '[title]') : prefs.filename;
+  if (isVOD) console.log('[liveDownload] VOD detected — using VOD filename template');
+
   let hostname = 'NA';
   try {
     const o = new URL(args.get('href'));
@@ -106,6 +120,22 @@ const addEntries = async entries => {
   const t = document.getElementById('entry');
   let naming = 0;
   let counter = 0;
+
+  // Translate page title ONCE (not per-entry — all entries share the same title)
+  let translatedTitle = args.get('title');
+  try {
+    const tsettings = await chrome.storage.local.get({ 'liveDownload_translateTitles': false });
+    if (tsettings['liveDownload_translateTitles'] && self.translateText && translatedTitle) {
+      const result = await self.translateText(translatedTitle);
+      if (result && result !== translatedTitle) {
+        console.log(`[liveDownload] Translated page title: "${translatedTitle}" → "${result}"`);
+        translatedTitle = result;
+      }
+    }
+  } catch (e) {
+    console.warn('[liveDownload] Title translation failed:', e.message);
+  }
+
   for (const entry of entries.values()) {
     const clone = document.importNode(t.content, true);
     const div = clone.querySelector('label');
@@ -199,22 +229,9 @@ const addEntries = async entries => {
     const name = async () => {
       let rawName = replacePlaceholders(prefs.filename, {
         'meta.name': meta.name,
-        'title': args.get('title'),
+        'title': translatedTitle,
         'hostname': hostname
       });
-      // Translate if enabled
-      try {
-        const settings = await chrome.storage.local.get({ 'liveDownload_translateTitles': false });
-        if (settings['liveDownload_translateTitles'] && self.translateText) {
-          const translated = await self.translateText(rawName);
-          if (translated && translated !== rawName) {
-            console.log(`[liveDownload] Translated: "${rawName}" → "${translated}"`);
-            rawName = translated;
-          }
-        }
-      } catch (e) {
-        console.warn('[liveDownload] build.js translation failed:', e.message);
-      }
       meta.gname = en.textContent = en.title = rawName;
 
       if (prefs.filename.includes('[meta.name]') === false) {

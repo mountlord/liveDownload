@@ -90,7 +90,10 @@ const download = async (segments, file, codec = '') => {
         console.log('[liveDownload] Live stream detected → LiveMonitor');
         const baseFilename = file.name.replace(/\.[^.]+$/, '');
         const monitor = new window.LiveMonitor(manifestUrl, baseFilename, codec);
-        return await monitor.start(segments, file);
+        // Auto-record proxy: pass null so LiveMonitor creates the file itself
+        // after directory resolution and title translation
+        const fileHandle = file._autoRecord ? null : file;
+        return await monitor.start(segments, fileHandle);
       }
     } catch (e) {
       console.warn('[liveDownload] Live detection failed, falling through to VOD:', e.message);
@@ -281,31 +284,47 @@ document.getElementById('hrefs').onsubmit = async e => {
   try {
     div.dataset.active = true;
 
-    const opts = helper.options(div);
-
     let file = self.aFile;
     if (!file) {
-      const savedDir = window.getRootDirectory?.();
-      if (savedDir) opts.startIn = savedDir;
+      const opts = helper.options(div);
 
-      try {
-        file = await window.showSaveFilePicker(opts);
-      } catch (e) {
-        // Strip illegal chars and retry (Windows/macOS/Linux safe filenames)
-        if (e instanceof TypeError) {
-          try {
-            opts.suggestedName = opts.suggestedName?.replace(/[\\/:*?"<>|\0]|^[\s.]+|[\s.]+$|[~`!@#$%^&+={}[\];,]/g, '_');
-            file = await window.showSaveFilePicker(opts);
-          } catch (e2) {
-            if (e2 instanceof TypeError) {
-              delete opts.suggestedName;
-              file = await window.showSaveFilePicker(opts);
-            } else {
-              throw e2;
-            }
+      // Try saving directly to the configured root directory (no picker dialog).
+      // Falls back to showSaveFilePicker if no directory is configured or permission is lost.
+      const savedDir = window.getRootDirectory?.();
+      if (savedDir) {
+        try {
+          const perm = await savedDir.queryPermission({ mode: 'readwrite' });
+          if (perm === 'granted') {
+            let filename = (opts.suggestedName || 'Untitled.ts')
+              .replace(/[\\/:*?"<>|]/g, '_').trim();
+            file = await savedDir.getFileHandle(filename, { create: true });
+            console.log('[liveDownload] Saving to root directory:', savedDir.name, '/', filename);
           }
-        } else {
-          throw e;
+        } catch (e) {
+          console.warn('[liveDownload] Root directory access failed, falling back to file picker');
+        }
+      }
+
+      if (!file) {
+        if (savedDir) opts.startIn = savedDir;
+        try {
+          file = await window.showSaveFilePicker(opts);
+        } catch (e) {
+          if (e instanceof TypeError) {
+            try {
+              opts.suggestedName = opts.suggestedName?.replace(/[\\/:*?"<>|\0]|^[\s.]+|[\s.]+$|[~`!@#$%^&+={}[\];,]/g, '_');
+              file = await window.showSaveFilePicker(opts);
+            } catch (e2) {
+              if (e2 instanceof TypeError) {
+                delete opts.suggestedName;
+                file = await window.showSaveFilePicker(opts);
+              } else {
+                throw e2;
+              }
+            }
+          } else {
+            throw e;
+          }
         }
       }
     }
