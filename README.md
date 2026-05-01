@@ -18,11 +18,12 @@ A Chrome extension for unattended live stream recording and VOD downloading from
 ## Installation
 
 1. Download the latest release zip from the [Releases](https://github.com/mountlord/livedownload/releases) page
-2. Unzip to a local folder
+2. Unzip to a local folder - if live updates to extension are needed
 3. Open Chrome and navigate to `chrome://extensions`
 4. Enable **Developer mode** (top right)
-5. Click **Load unpacked** and select the `Extension` folder
-6. The liveDownload icon appears in the toolbar
+5. Drag & Drop liveDownload.zip OR do Step 6.
+6. Click **Load unpacked** and select the folder you unzipped in Step 2.
+7. The liveDownload icon appears in the toolbar
 
 ---
 
@@ -50,8 +51,7 @@ By default, recordings go to your browser's Downloads folder. To save to a speci
 2. Under **Root Download Directory**, click **Choose Folder**
 3. Select your folder and click **Save Settings**
 
-The folder selection survives browser restarts. A file called `liveFolder.TXT` is written to the folder when you save — this is normal and is used to maintain folder access across restarts.
-
+The folder selection may survives browser restarts. Chrome's behavipr has been inconsistent. Only sure way to ensure all recordings go to a folder of your choice is to set that folder as the download directory of the browser.
 ---
 
 ## Wait for Recording URLs (WRU)
